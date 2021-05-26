@@ -1,6 +1,4 @@
-import time
 from tkinter import *
-from tkinter.ttk import Progressbar
 import pyodbc
 
 server = 'localhost'
@@ -183,134 +181,363 @@ def enter_cust(event):
             c.costumer_id=cl.cust_id
             where login=? and PASSWORD=?
         ''', login, password))
-    if len(select) != 0:
-        customer_buy(select)
+    def customer_order(event):
+        (cust_id, cust_name) = select[0]
+        stock_shop = Toplevel()
+        stock_shop.title('Available products')
+        stock_shop.geometry('800x800')
+        stock_shop.configure(bg='floral white')
+        label_cust_name = Label(stock_shop, text=f'Hi, {cust_name}!', bg='floral white', font=('Lucida', 12, 'bold'),
+                                fg='bisque4')
+        label_cust_name.pack(side='top')
+        prod_select = tuple(mycursor.execute('''
+                            select stock_id,sell_price,stock_name from in_stock
+                        '''))
+        if len(prod_select) != 0:
+            pos = 80
+            orders = []
 
-def customer_buy(select):
-    (cust_id, cust_name) = select[0]
-    stock_shop = Toplevel()
-    stock_shop.title('Available products')
-    stock_shop.geometry('800x800')
-    stock_shop.configure(bg='floral white')
-    label_cust_name = Label(stock_shop, text=f'Hi, {cust_name}!', bg='floral white', font=('Lucida', 12, 'bold'),
-                            fg='bisque4')
-    label_cust_name.pack(side = 'top')
-    prod_select = tuple(mycursor.execute('''
-                        select stock_id,sell_price,stock_name from in_stock
-                    '''))
-    if len(prod_select) != 0:
-        pos = 80
-        orders = []
+            class Product:
+                window = None
+                products = []
+                total = 0
+                l_total = None
 
-        class Product:
-            window = None
-            products = []
-            total = 0
-            l_total = None
-
-            def __init__(self, window, stock_id, sell_price, stock_name, x, y):
-                Product.window = window
-                Product.l_total=Label(window, text=f'Total: {Product.total}', bg='floral white', font=('Lucida', 11, 'bold'),
-                      fg='bisque4')
-                self.q = 0
-                self.ordered = False
-                self.window = window
-                self.x = x
-                self.y = y
-                self.stock_id = stock_id
-                self.sell_price = sell_price
-                self.stock_name = stock_name
-                self.remove = Button(self.window, text='Remove', bg='bisque4', font=('Lucida'), fg='black', width=8)
-                self.remove.bind('<Button-1>', self.decrease)
-                self.remove.pack()
-                self.remove.place(x=self.x - 150, y=self.y)
-                self.l_name = Label(self.window, text=f'{self.stock_name}: {self.sell_price}', bg='floral white',
-                                    font=('Lucida', 11, 'bold'),
-                                    fg='bisque4')
-                self.l_name.pack()
-                self.l_name.place(x=self.x, y=self.y)
-                self.add = Button(self.window, text='Add', bg='bisque4', font=('Lucida'), fg='black', width=8)
-                self.add.bind('<Button-1>', self.increase)
-                self.add.pack()
-                self.add.place(x=self.x + 150, y=self.y)
-                self.l_q = Label(self.window, text=f'{self.q}', bg='floral white',
-                                 font=('Lucida', 11, 'bold'),
-                                 fg='bisque4')
-                self.l_q.pack()
-                self.l_q.place(x=self.x+ 300, y=self.y)
-                Product.products.append(self)
-
-            def increase(self, event):
-                self.q += 1
-                self.l_q['text'] = str(self.q)
-                if self.q > 0:
-                    self.ordered = True
-                    Product.total += self.sell_price
-                else:
+                def __init__(self, window, stock_id, sell_price, stock_name, x, y):
+                    Product.window = window
+                    Product.l_total = Label(window, text=f'Total: {Product.total}', bg='floral white',
+                                            font=('Lucida', 11, 'bold'),
+                                            fg='bisque4')
+                    self.q = 0
                     self.ordered = False
-                Product.l_total['text'] = 'Total: '+str(Product.total)
-                # print(Product.total)
-
-            def decrease(self, event):
-                self.q -= 1
-                if self.q>=0:
-                    self.ordered=True
-                    if self.q==0:
-                        self.ordered=False
-                    Product.total+=-self.sell_price
-                else:
-                    self.q=0
-                    self.ordered=False
-                self.l_q['text'] = str(self.q)
-                Product.l_total['text'] = 'Total: '+str(Product.total)
-                # print(Product.total)
-
-        for (stock_id, sell_price, stock_name) in prod_select:
-            p = Product(stock_shop, stock_id, sell_price, stock_name, 150, pos)
-            pos += 100
-        Product.l_total.pack()
-        Product.l_total.place(x=600, y=400)
-        # print(stock_shop)
-
-        def order(event):
-            if Product.total!=0:
-                mycursor.execute('''
-                exec online_order @costumer_id = ?
-                ''', cust_id)
-                mycursor.commit()
-                for p in Product.products:
-                    if p.ordered:
-                        mycursor.execute('''
-                        insert into orders values((select max(order_id) from detail_order),?,?)
-                        ''', p.stock_id, p.q)
-                        mycursor.commit()
-
-                thanks = Toplevel()
-                thanks.title('Thank you')
-                thanks.geometry('300x300')
-                thanks.configure(bg='floral white')
-                label_th = Label(stock_shop, text=f'Thank you, your order was written!', bg='floral white',
-                                        font=('Lucida', 12, 'bold'),
+                    self.window = window
+                    self.x = x
+                    self.y = y
+                    self.stock_id = stock_id
+                    self.sell_price = sell_price
+                    self.stock_name = stock_name
+                    self.remove = Button(self.window, text='Remove', bg='bisque4', font=('Lucida'), fg='black', width=8)
+                    self.remove.bind('<Button-1>', self.decrease)
+                    self.remove.pack()
+                    self.remove.place(x=self.x - 150, y=self.y)
+                    self.l_name = Label(self.window, text=f'{self.stock_name}: {self.sell_price}', bg='floral white',
+                                        font=('Lucida', 11, 'bold'),
                                         fg='bisque4')
-                label_th.pack()
-                label_th.place(x=0, y=5)
-                stock_shop.destroy()
-            else:
-                please = Toplevel()
-                please.title('Attention')
-                please.geometry('300x300')
-                please.configure(bg='floral white')
-                label_pl = Label(please, text=f'Please, order something!', bg='floral white',
-                                 font=('Lucida', 12, 'bold'),
-                                 fg='bisque4')
-                label_pl.pack()
-                label_pl.place(x=0, y=5)
+                    self.l_name.pack()
+                    self.l_name.place(x=self.x, y=self.y)
+                    self.add = Button(self.window, text='Add', bg='bisque4', font=('Lucida'), fg='black', width=8)
+                    self.add.bind('<Button-1>', self.increase)
+                    self.add.pack()
+                    self.add.place(x=self.x + 150, y=self.y)
+                    self.l_q = Label(self.window, text=f'{self.q}', bg='floral white',
+                                     font=('Lucida', 11, 'bold'),
+                                     fg='bisque4')
+                    self.l_q.pack()
+                    self.l_q.place(x=self.x + 300, y=self.y)
+                    Product.products.append(self)
+
+                def increase(self, event):
+                    self.q += 1
+                    self.l_q['text'] = str(self.q)
+                    if self.q > 0:
+                        self.ordered = True
+                        Product.total += self.sell_price
+                    else:
+                        self.ordered = False
+                    Product.l_total['text'] = 'Total: ' + str(Product.total)
+                    # print(Product.total)
+
+                def decrease(self, event):
+                    self.q -= 1
+                    if self.q >= 0:
+                        self.ordered = True
+                        if self.q == 0:
+                            self.ordered = False
+                        Product.total += -self.sell_price
+                    else:
+                        self.q = 0
+                        self.ordered = False
+                    self.l_q['text'] = str(self.q)
+                    Product.l_total['text'] = 'Total: ' + str(Product.total)
+                    # print(Product.total)
+
+            for (stock_id, sell_price, stock_name) in prod_select:
+                p = Product(stock_shop, stock_id, sell_price, stock_name, 150, pos)
+                pos += 100
+            Product.l_total.pack()
+            Product.l_total.place(x=600, y=400)
+
+            # print(stock_shop)
+
+            def order(event):
+                if Product.total != 0:
+                    mycursor.execute('''
+                    exec online_order @costumer_id = ?
+                    ''', cust_id)
+                    mycursor.commit()
+                    for p in Product.products:
+                        if p.ordered:
+                            mycursor.execute('''
+                            insert into orders values((select max(order_id) from detail_order),?,?)
+                            ''', p.stock_id, p.q)
+                            mycursor.commit()
+
+                    thanks = Toplevel()
+                    thanks.title('Thank you')
+                    thanks.geometry('300x300')
+                    thanks.configure(bg='floral white')
+                    label_th = Label(thanks, text='Thank you, your order was written!', bg='floral white',
+                                     font=('Lucida', 12, 'bold'),
+                                     fg='bisque4')
+                    label_th.pack()
+                    label_th.place(x=5, y=150)
+                    stock_shop.destroy()
+                else:
+                    please = Toplevel()
+                    please.title('Attention')
+                    please.geometry('300x300')
+                    please.configure(bg='floral white')
+                    label_pl = Label(please, text='Please, order something!', bg='floral white',
+                                     font=('Lucida', 12, 'bold'),
+                                     fg='bisque4')
+                    label_pl.pack()
+                    label_pl.place(x=0, y=5)
+
+            button_order = Button(stock_shop, text='Order', bg='bisque4', font=('Lucida'), fg='black', width=8)
+            button_order.bind('<Button-1>', order)
+            button_order.pack()
+            button_order.place(x=600, y=500)
+
+    def bask(event=None):
+        (cust_id, cust_name) = select[0]
+        s_dorder=mycursor.execute('''
+        select order_id,date_ordered,total_price,paid from detail_order
+        where costumer_id=? and paid='F'
+        ''', cust_id)
+        basket = Toplevel(root)
+        basket.title('Customer autorization')
+        basket.geometry('800x800')
+
+        class Order:
+            def __init__(self,window,order_id,date_ordered,total_price,x,y):
+                self.x=x
+                self.y=y
+                self.total_price=total_price
+                self.window=window
+                self.date_ordered=date_ordered
+                self.order_id=order_id
+                self.l_order = Label(self.window, text=f'{self.order_id}    {self.date_ordered}    {self.total_price}', bg='floral white',
+                                     font=('Lucida', 12, 'bold'),
+                                     fg='bisque4')
+                self.b_paybb=Button(self.window, text='Pay by bonuses', bg='bisque4', font=('Lucida'), fg='black', width=8)
+                self.b_pay=Button(self.window, text='Pay', bg='bisque4', font=('Lucida'), fg='black', width=8)
+                self.b_pay.bind('<Button-1>', self.pay)
+                self.b_paybb.bind('<Button-1>',self.paybb)
+                self.b_pay.pack()
+                self.b_paybb.pack()
+                self.l_order.place(x=self.x,y=self.y)
+                self.b_pay.place(x=self.x+300,y=self.y)
+                self.b_paybb.place(x=self.x+420,y=self.y)
+
+            def pay(self,event):
+                mycursor.execute('''
+                update detail_order
+                set paid='T'
+                where order_id=?
+                ''',self.order_id)
+                th = Toplevel(root)
+                th.title('Thank you!')
+                th.geometry('200x200')
+                l_th=Label(th, text=f'You order {self.order_id} was paid!',
+                      bg='floral white',
+                      font=('Lucida', 12, 'bold'),
+                      fg='bisque4')
+                l_th.pack()
+                l_th.place(x=25, y=100)
+                # window=self.window
+                self.window.destroy()
+                bask()
 
 
-        button_order = Button(stock_shop, text='Order', bg='bisque4', font=('Lucida'), fg='black', width=8)
-        button_order.bind('<Button-1>', order)
+            def paybb(self,event):
+                mycursor.execute('''
+                exec pay_by_bonuses @order_id = ?
+                ''',self.order_id)
+                res=tuple(mycursor.execute('''
+                select paid from detail_order
+                where order_id=?
+                ''',self.order_id))[0][0]
+                att = Toplevel(root)
+                att.title('Attention!')
+                att.geometry('200x200')
+                l_att = Label(att, text='',
+                             bg='floral white',
+                             font=('Lucida', 12, 'bold'),
+                             fg='bisque4')
+                if res=='T':
+                    l_att['text']=f'Thank you, your order {self.order_id} was paid by bonuses'
+                    self.window.destroy()
+                    bask()
+                else:
+                    l_att['text']=f'Недостаточно бонусов для оплаты'
+                l_att.pack()
+                l_att.place(x=25, y=100)
+
+        if list(s_dorder):
+            y = 10
+            for order_id,date_ordered,total_price,paid in s_dorder:
+                o=Order(basket,order_id,date_ordered,total_price,5,y)
+                y+=40
+
+        else:
+            l_em = Label(basket, text=f'У вас нет заказов',
+                         bg='floral white',
+                         font=('Lucida', 12, 'bold'),
+                         fg='bisque4')
+            l_em.pack()
+            l_em.place(x=25, y=100)
+
+    def bonus(event):
+        (cust_id, cust_name) = select[0]
+        w_bon = Toplevel(root)
+        w_bon.title('Bonuses')
+        w_bon.geometry('300x300')
+        mycursor.execute('''
+        exec check_bonus
+        ''')
+        (bonuses,open_date,last_bonus,expire)=tuple(mycursor.execute('''
+        select bonuses,open_date,last_bonus, DATEDIFF(day, last_bonus, getdate()) from bonus_cards
+        where costumer_id=?
+        ''',cust_id))[0]
+
+        exp=''
+        if expire>=3:
+            exp='\nВаши бонусы будут обнулены в связи того что их больше 10,000 и с последней покупки прошло 3 дня'
+        l_bon = Label(w_bon, text=f'{bonuses}   {open_date}    {last_bonus}{exp}',
+                     bg='floral white',
+                     font=('Lucida', 12, 'bold'),
+                     fg='bisque4')
+        l_bon.pack()
+        l_bon.place(x=25, y=100)
+
+        def present(event):
+            w_pres = Toplevel(root)
+            w_pres.title('Presents')
+            w_pres.geometry('800x800')
+            s_pres=mycursor.execute('''
+            select present_id, present_name,present_price from presents
+            ''')
+            l_bon = Label(w_pres, text=str(bonuses),
+                           bg='floral white',
+                           font=('Lucida', 12, 'bold'),
+                           fg='bisque4')
+            class Present:
+                def __init__(self,window,id,name,price,x,y):
+                    self.id=id
+                    self.name=name
+                    self.price=price
+                    self.window=window
+                    self.x=x
+                    self.y=y
+                    self.b_ch = Button(self.window, text='Обменять', bg='bisque4', font=('Lucida'), fg='black', width=8)
+                    self.l_pr=Label(self.window, text=self.name+'   '+str(self.price),
+                            bg='floral white',
+                            font=('Lucida', 12, 'bold'),
+                            fg='bisque4')
+                    self.l_er = Label(self.window, text='',
+                                      bg='floral white',
+                                      font=('Lucida', 12, 'bold'),
+                                      fg='bisque4')
+                    self.b_ch.bind('<Button-1>', self.chan)
+                    self.b_ch.pack()
+                    self.l_er.pack()
+                    self.l_pr.pack()
+                    self.b_ch.place(x=self.x+100,y=self.y)
+                    self.l_pr.place(x=self.x,y=self.y)
+                    self.l_er.place(x=self.x+200,y=self.y)
+
+                def chan(self, event):
+                    '''if bonuses < self.price:
+                        self.l_er['text'] = 'Недостаточно бонусов'
+                    else:'''
+                    # print(cust_id,self.id)
+                    s_ch=tuple(mycursor.execute('''
+                    SET NOCOUNT ON
+                    exec presents_trade @costumer_id = 1, @present_id = 1
+                    '''))[0][0]
+
+                    if s_ch=='Недостаточно бонусов!':
+                        self.l_er['text'] = 'Недостаточно бонусов'
+                    else:
+                        w_succ = Toplevel(root)
+                        w_succ.title('Attention!')
+                        w_succ.geometry('200x200')
+                        l_succ = Label(w_succ, text='Бонусы успешно были обменены на подарок',
+                                      bg='floral white',
+                                      font=('Lucida', 12, 'bold'),
+                                      fg='bisque4')
+                        l_succ.pack()
+                        l_succ.place(x=0,y=100)
+                        w_pres.destroy()
+                        w_bon.destroy()
+                        # present(None)
+                        bonus(None)
+
+            y=40
+            for present_id, present_name,present_price in s_pres:
+                pr=Present(w_pres,present_id,present_name,present_price,5,y)
+                y+=40
+
+            l_bon.pack()
+            l_bon.place(x=400, y=0)
+
+        button_change = Button(w_bon, text='Обменять на подарки', bg='bisque4', font=('Lucida'), fg='black', width=8)
+        button_change.bind('<Button-1>', present)
+        button_change.pack()
+
+    def my_pres(event):
+        (cust_id, cust_name) = select[0]
+        w_mpr = Toplevel(root)
+        w_mpr.title('Presents')
+        w_mpr.geometry('150x800')
+        pr_l = list(mycursor.execute('''
+        select p.present_name from presents_bonus pb
+        join presents p
+        on pb.present_id=p.present_id
+        where costumer_id=?
+        ''',cust_id))
+        if pr_l:
+            pr_name='\n'.join([pr[0] for pr in pr_l])
+        l_mpr = Label(w_mpr, text=pr_name,
+                      bg='floral white',
+                      font=('Lucida', 12, 'bold'),
+                      fg='bisque4')
+        l_mpr.pack()
+        l_mpr.place(x=0, y=100)
+
+    if len(select) != 0:
+
+        pay_or_order = Toplevel(root)
+        pay_or_order.title('Customer autorization')
+        pay_or_order.geometry('300x130')
+        pay_or_order.configure(bg='floral white')
+        button_pay = Button(pay_or_order, text='Basket', bg='bisque4', font=('Lucida'), fg='black', width=8)
+        button_pay.bind('<Button-1>', bask)
+        button_bon = Button(pay_or_order, text='Bonuses', bg='bisque4', font=('Lucida'), fg='black', width=8)
+        button_bon.bind('<Button-1>', bonus)
+        button_order = Button(pay_or_order, text='Order', bg='bisque4', font=('Lucida'), fg='black', width=8)
+        button_order.bind('<Button-1>', customer_order)
+        button_pres = Button(pay_or_order, text='My presents', bg='bisque4', font=('Lucida'), fg='black', width=8)
+        button_pres.bind('<Button-1>', my_pres)
+
+        button_pay.pack()
+        button_pres.pack()
+        button_bon.pack()
         button_order.pack()
-        button_order.place(x=600, y=500)
+        button_pay.place(x=0, y=65)
+        button_pres.place(x=100, y=25)
+        button_bon.place(x=100, y=65)
+        button_order.place(x=200, y=65)
 
 '''admin'''
 

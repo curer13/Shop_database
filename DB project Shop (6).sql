@@ -280,14 +280,17 @@ begin
 	if @action = 'insert'
 	begin
 		set @name = (select stock_name from inserted)
+		
 		print concat(N'Товар ',@name ,N' требует закупа!')
 	end
 	else begin
 		set @name = (select stock_name from deleted)
-		print concat(N'Товар ',@name ,N' больше не требует закупа!')
+		select concat(N'Товар ',@name ,N' больше не требует закупа!') as a
 	end
 end
 GO
+
+--drop TRIGGER to_buy_insert_delete
 
 create function stock_name
 (@id integer)
@@ -312,14 +315,29 @@ begin
 		end
 	set @i = @i+1
 	end
+	SELECT concat(N'Товар ',stock_name ,N' требует закупа!') from to_buy
 end
 GO
+
+drop PROCEDURE stock_to_buy
+
+DELETE from purchase_date WHERE purchase_date='25.05.2021'
 
 update in_stock set stock_q = 45 where stock_id = 4 or stock_id = 8
 exec stock_to_buy
 select*from to_buy
 select*from purchase_date
+set LANGUAGE russian;
 insert into purchase_date values(3,4,1000,'23.04.21')
+insert into purchase_date values(4,8,1000,GETDATE())
+
+SELECT*From purchase_date
+SELECT*from to_buy
+SELECT*from in_stock
+SELECT*from buyer_stock
+
+select buyer_id from buyer_stock
+where stock_id=3
 
 /*5*/
 create table order_status(
@@ -455,6 +473,7 @@ create table presents_bonus(
 	present_id integer,
 	constraint fk_bonus_present foreign key(present_id) references presents(present_id)
 )
+GO
 
 create function calculate_bonuses (@id integer)
 returns decimal(10,2) as
@@ -464,6 +483,9 @@ begin
 	where costumer_id = @id)
 	return @bonus
 end
+GO
+
+--select *from order_status
 
 create trigger bonus_update
 on detail_order
@@ -484,6 +506,7 @@ begin
 		end
 	end
 end
+GO
 
 create trigger presents_bonus_trade
 on presents_bonus
@@ -498,13 +521,14 @@ begin
 	begin
 		update bonus_cards set bonuses = bonuses - @price
 		where costumer_id = @id
-		print ('Обмен бонусов на подарки прошел успешно!')
+		select (N'Обмен бонусов на подарки прошел успешно!')
 	end
 	else begin
 		delete from presents_bonus where id = @trans
-		print ('Недостаточно бонусов!')
+		select (N'Недостаточно бонусов!')
 	end
 end
+GO
 
 create function cost_name (@id integer)
 returns varchar(20) as
@@ -512,6 +536,7 @@ begin
 	declare @name varchar(20) = (select costumer_name from costumers where costumer_id = @id)
 	return @name
 end
+GO
 
 create procedure pay_by_bonuses (@order_id integer) as
 begin
@@ -523,17 +548,21 @@ begin
 		update bonus_cards set bonuses = bonuses - @total where costumer_id = @costumer
 		update detail_order set total_price = 0 where order_id = @order_id
 		update detail_order set paid = 'T' where order_id = @order_id
-		print concat('Покупка номер ', @order_id, ' оплачена бонусами!')
+		select concat(N'Покупка номер ', @order_id, N' оплачена бонусами!') as a
 	end
 	else begin
-		print 'Недостаточно бонусов!'
+		select N'Недостаточно бонусов!' as b
 	end
 end
+GO
+
+--drop proc pay_by_bonuses
 
 create procedure presents_trade (@costumer_id integer, @present_id integer) as
 begin
 	insert into presents_bonus values(@costumer_id, @present_id)
 end
+GO
 
 create trigger bonus_messenges 
 on bonus_cards
@@ -544,15 +573,17 @@ begin
 	declare @day date = (select dateadd(day, 3, last_bonus) from inserted)
 	if @bonus >= 5000 and @bonus < 10000
 	begin
-		print concat('Пользователь ', dbo.cost_name(@id), ' может начать использовать свои бонусы!')
+		select concat(N'Пользователь ', dbo.cost_name(@id), N' может начать использовать свои бонусы!')
 	end
 	if @bonus >= 10000
 	begin
-		print concat('Пользователь ', dbo.cost_name(@id), ' должен использовать бонусы до ', @day)
+		select concat(N'Пользователь ', dbo.cost_name(@id), N' должен использовать бонусы до ', @day)
 	end
 end
 
+
 create index ix_bonus on bonus_cards(bonuses)
+GO
 
 create procedure check_bonus as
 begin
@@ -564,32 +595,55 @@ begin
 		if @id in (select costumer_id from bonus_cards where bonuses >= 10000 and datediff(day, last_bonus, @date) >= 3)
 		begin
 			update bonus_cards set bonuses = 0 where costumer_id = @id
-			print concat('Бонусы пользователя ', dbo.cost_name(@id), ' обнулены!') 
+			select concat(N'Бонусы пользователя ', dbo.cost_name(@id), N' обнулены!') 
 		end
 		if @id in (select costumer_id from bonus_cards where datediff(year, open_date, @date) >= 1)
 		begin
 			delete from bonus_cards where costumer_id = @id
-			print concat('Срок действия бонусной карты пользователя ', dbo.cost_name(@id), ' истек!')
+			select concat(N'Срок действия бонусной карты пользователя ', dbo.cost_name(@id), N' истек!')
 		end
 	set @id = @id+1
 	end
 end
+GO
 
+set LANGUAGE russian
+
+select*from in_stock
+SELECT*from orders
+
+update detail_order
+set paid='T'
+where order_id=1015
+
+set LANGUAGE russian
+
+update detail_order
+set date_delivered='26.05.2021'
+where order_id=1016
+
+update detail_order
+set paid='F'
+where costumer_id=1
+
+SELECT*from orders
 select*from bonus_cards
 select*from detail_order
 select*from presents_bonus
-exec online_order @costumer_id = 3
-insert into orders values (20, 5, 1)
-exec pay_by_bonuses @order_id = 21
-exec presents_trade @costumer_id = 3, @present_id = 4
+SELECT*from presents
+
+exec online_order @costumer_id = 1
+insert into orders values (2016, 10, 1)
+exec pay_by_bonuses @order_id = 2021
+exec presents_trade @costumer_id = 1, @present_id = 1
 exec presents_trade @costumer_id = 1, @present_id = 4
 exec online_order @costumer_id = 3
-insert into orders values (25, 5, 1)
-update bonus_cards set bonuses = 100000 where costumer_id = 4
-exec pay_by_bonuses @order_id = 24
+insert into orders values (1012, 5, 1)
+update bonus_cards set bonuses = 200000 where costumer_id = 1
+exec pay_by_bonuses @order_id = 
 update detail_order set status = 'D' where order_id = 25
 
-exec presents_trade @costumer_id = 4, @present_id = 3
+exec presents_trade @costumer_id = 3, @present_id = 2
 exec presents_trade @costumer_id = 4, @present_id = 2
 exec online_order @costumer_id = 4
 insert into orders values(24, 3, 20)
@@ -604,11 +658,15 @@ select*from detail_order
 select*from bonus_cards
 update bonus_cards set bonuses = 15470 where costumer_id = 4
 update bonus_cards set last_bonus = '30.04.2021' where costumer_id = 3
+
+insert into detail_order VALUES('30.05.2021',null,1,100,'T','D')
 exec check_bonus
 
 exec online_order @costumer_id = 4
 insert into orders values (23, 5, 5)
 exec pay_by_bonuses 23
+
+select*from presents
 
 /*2*/
 create table discounts(
@@ -808,7 +866,6 @@ RETURNS VARCHAR(40) as
             SET @sf_value = 'Ne rekomenduetsya prodolzhat';
      RETURN @sf_value;
     END
-GO
 
 /*create trigger otmena 
 on detail_order
@@ -818,48 +875,101 @@ begin
 	select order_id,'отменен товар на сумму'+total_price  from deleted
 end*/
 
+
 create table admins (
 	login varchar(20),
 	password varchar(30)
 )
-GO
-
-create table custs_login (
-	cust_id int,
-	login varchar(30),
-	PASSWORD VARCHAR(14),
-	constraint pk_custs PRIMARY KEY(cust_id),
-	CONSTRAINT pk_to_customer FOREIGN KEY(cust_id) REFERENCES costumers(costumer_id)
-)
-
-alter table custs_login
-drop pk_to_customer
-
-alter table custs_login
-add CONSTRAINT fk_to_customer FOREIGN KEY(cust_id) REFERENCES costumers(costumer_id)
 
 insert into admins values('a_anarbekova', 'Abcdefg1234')
 insert into admins values('e_kurmangali', 'Qwerty8910')
 
---fill custs_login
-INSERT into custs_login VALUES(1,'ken_ham','kenhem123.')
-INSERT into custs_login VALUES(2,'bon_mor','bonmor123..')
-INSERT into custs_login VALUES(3,'viv_gle','vivgle123.')
-INSERT into custs_login VALUES(4,'jos_ros','josros123.')
-INSERT into custs_login VALUES(5,'ali_pau','alipau123.')
+select*from costumers
 
+/*7*/
+create function items_ordered (@order_id integer)
+returns integer
+as begin
+	declare @items integer = (select count(*) from orders where order_id = @order_id)
+	return @items
+end
 
-select*from admins
-select*from custs_login
+create procedure cancel_order (@order_id integer)
+as begin
+	declare @total integer = (select total_price from detail_order where order_id = @order_id)
+	declare @status varchar(5) = (select Status from detail_order where order_id = @order_id)
+	declare @id integer = (select costumer_id from detail_order where order_id = @order_id)
+	if @order_id in (select order_id from detail_order)
+	begin
+		if @total > 0 
+		begin
+			declare @items integer = dbo.items_ordered(@order_id)
+			while @items >0 
+			begin
+				declare @item integer = (select max(stock_id) from orders where order_id = @order_id)
+				declare @quantity integer = (select num_ordered from orders where order_id = @order_id and stock_id = @item)
+				update in_stock set stock_q = stock_q + @quantity where stock_id = @item
+				delete from orders where order_id = @order_id and stock_id = @item
+				set @items = @items -1
+			end
+			if @status = 'D'
+			begin
+				update bonus_cards set bonuses = bonuses - @total*0.001 where costumer_id = @id
+			end
+		end
+		else print('Cannot cancel the order which was paid by bonuses')
+	end
+	else print('Order does not exist')
+end
 
-select * from custs_login cl
-join costumers c on
-c.costumer_id=cl.cust_id
-where login='bon_mor' and PASSWORD='bonmor123..'
+create trigger delete_order
+on orders
+after delete
+as begin
+	declare @order_id integer = (select order_id from deleted)
+	declare @items integer = dbo.items_ordered(@order_id)
+	if @items = 0
+	begin
+		delete from detail_order where order_id = @order_id
+	end
+end
 
-select *from in_stock
-SELECT*from costumers
-SELECT*from detail_order
+select*from detail_order
+select*from bonus_cards
 select*from orders
+select*from in_stock
+exec cancel_order @order_id = 3
 
-select costumer_id from costumers where costumer_name = 'Yera Kenzh' and costumer_address = 'Kz,Shym'
+/*8*/
+create table items_month(
+	stock_id integer,
+	constraint fk_items_month foreign key(stock_id) references in_stock(stock_id),
+	num_ordered integer
+)
+
+create function sold_amount (@stock_id integer)
+returns integer
+as begin
+	declare @amount integer = 
+	(select sum(num_ordered) from items_month
+	group by stock_id having stock_id = @stock_id)
+	return @amount
+end
+
+create procedure most_sold(@month varchar(15))
+as begin
+	declare @mon_num integer = dbo.fn_month_name_to_number(@month);
+	delete from items_month
+	insert into items_month (stock_id, num_ordered) 
+	select o.stock_id, o.num_ordered from orders o join detail_order d
+	on o.order_id = d.order_id where month(d.date_ordered) = @mon_num
+	declare @amount integer = 
+	(select max(dbo.sold_amount(stock_id)) from items_month)
+	declare @name varchar(30) = (select stock_name from in_stock where dbo.sold_amount(stock_id) = @amount)
+	print concat('Most popular item in ', @month, ' is ', @name)
+end
+
+select*from detail_order
+select*from orders
+select*from in_stock
+exec most_sold 'March'
