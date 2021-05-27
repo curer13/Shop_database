@@ -521,14 +521,16 @@ begin
 	begin
 		update bonus_cards set bonuses = bonuses - @price
 		where costumer_id = @id
-		select (N'Обмен бонусов на подарки прошел успешно!')
+		select (N'Обмен бонусов на подарки прошел успешно!') as z
 	end
 	else begin
 		delete from presents_bonus where id = @trans
-		select (N'Недостаточно бонусов!')
+		select (N'Недостаточно бонусов!') as q
 	end
 end
 GO
+
+--drop trigger presents_bonus_trade
 
 create function cost_name (@id integer)
 returns varchar(20) as
@@ -631,6 +633,11 @@ select*from bonus_cards
 select*from detail_order
 select*from presents_bonus
 SELECT*from presents
+
+select p.present_name from presents_bonus pb
+join presents p
+on pb.present_id=p.present_id
+where costumer_id=1
 
 exec online_order @costumer_id = 1
 insert into orders values (2016, 10, 1)
@@ -885,6 +892,7 @@ insert into admins values('a_anarbekova', 'Abcdefg1234')
 insert into admins values('e_kurmangali', 'Qwerty8910')
 
 select*from costumers
+GO
 
 /*7*/
 create function items_ordered (@order_id integer)
@@ -893,6 +901,7 @@ as begin
 	declare @items integer = (select count(*) from orders where order_id = @order_id)
 	return @items
 end
+GO
 
 create procedure cancel_order (@order_id integer)
 as begin
@@ -917,10 +926,21 @@ as begin
 				update bonus_cards set bonuses = bonuses - @total*0.001 where costumer_id = @id
 			end
 		end
-		else print('Cannot cancel the order which was paid by bonuses')
+		else select 'Cannot cancel the order which was paid by bonuses'
 	end
-	else print('Order does not exist')
+	else select 'Order does not exist'
 end
+
+set nocount on
+exec cancel_order @order_id=2029
+if EXISTS(select order_id from detail_order where order_id=2029)
+BEGIN
+	select 'The order '+'2029'+' was canceled'
+end
+
+SELECT*from defaulters
+SELECT*from detail_order
+GO
 
 create trigger delete_order
 on orders
@@ -933,12 +953,16 @@ as begin
 		delete from detail_order where order_id = @order_id
 	end
 end
+GO
 
 select*from detail_order
 select*from bonus_cards
 select*from orders
 select*from in_stock
-exec cancel_order @order_id = 3
+exec cancel_order @order_id = 2028
+
+select*from presents_bonus
+select*from detail_order
 
 /*8*/
 create table items_month(
@@ -946,6 +970,7 @@ create table items_month(
 	constraint fk_items_month foreign key(stock_id) references in_stock(stock_id),
 	num_ordered integer
 )
+GO
 
 create function sold_amount (@stock_id integer)
 returns integer
@@ -955,6 +980,7 @@ as begin
 	group by stock_id having stock_id = @stock_id)
 	return @amount
 end
+GO
 
 create procedure most_sold(@month varchar(15))
 as begin
@@ -966,10 +992,76 @@ as begin
 	declare @amount integer = 
 	(select max(dbo.sold_amount(stock_id)) from items_month)
 	declare @name varchar(30) = (select stock_name from in_stock where dbo.sold_amount(stock_id) = @amount)
-	print concat('Most popular item in ', @month, ' is ', @name)
+	select concat('Most popular item in ', @month, ' is ', @name)
 end
 
 select*from detail_order
 select*from orders
 select*from in_stock
 exec most_sold 'March'
+GO
+
+/* 9 */
+alter TABLE detail_order
+alter COLUMN total_price FLOAT
+GO
+
+create FUNCTION fn_check_for_discount
+(@order_id int)
+RETURNS TABLE
+AS
+RETURN
+	select o.order_id,sum(o.num_ordered) as prod_num,min(ins.sell_price) as cheapest from orders o
+	join in_stock ins
+	on o.stock_id=ins.stock_id
+	group by o.order_id
+	having o.order_id=@order_id
+GO
+
+create PROCEDURE proc_make_discount (@order_id int, @percent float, @stock_id int)
+as
+BEGIN
+	DECLARE @all_prod_num int;
+	DECLARE @prod_num int;
+	DECLARE @cheapest int;
+	DECLARE @discount FLOAT;
+	DECLARE @total_price INT;
+	set @all_prod_num=(select prod_num from dbo.fn_check_for_discount(@order_id))
+	set @prod_num=(select num_ordered from orders where order_id=@order_id and stock_id=@stock_id)
+	set @total_price=(select total_price from detail_order WHERE order_id=@order_id)
+	if @all_prod_num>=7 and @total_price>0
+	BEGIN
+		set @cheapest=(select cheapest from dbo.fn_check_for_discount(@order_id))
+		set @discount=@prod_num*(@percent*@cheapest)
+		UPDATE detail_order set total_price=total_price-@discount where order_id=@order_id
+		select 'And, You have discount thanks to buying 7 products'
+	END
+	else
+	BEGIN
+		select 'You can have discount by ordering 7 or more items!'
+	END
+end
+GO
+
+create TRIGGER trig_make_discount
+on orders
+after INSERT
+as
+BEGIN
+	DECLARE @ord_id INT;
+	DECLARE @st_id int;
+	set @st_id=(select stock_id from inserted)
+	set @ord_id=(select order_id from inserted)
+	set NOCOUNT on
+	EXEC proc_make_discount @order_id=@ord_id, @percent=0.07, @stock_id=@st_id
+END
+
+select *from detail_order
+select*from orders
+
+SELECT *from dbo.fn_check_for_discount(2046)
+
+INSERT into detail_order values(getdate(),null,1,12000,'F','F')
+insert into orders VALUES(2058,5,7)
+
+exec online_order @costumer_id = 1

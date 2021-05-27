@@ -277,16 +277,18 @@ def enter_cust(event):
                     mycursor.commit()
                     for p in Product.products:
                         if p.ordered:
-                            mycursor.execute('''
+                            s_ord=mycursor.execute('''
+                            set nocount on
                             insert into orders values((select max(order_id) from detail_order),?,?)
                             ''', p.stock_id, p.q)
-                            mycursor.commit()
+
+                            tx=list(s_ord)[0][0]
 
                     thanks = Toplevel()
                     thanks.title('Thank you')
                     thanks.geometry('300x300')
                     thanks.configure(bg='floral white')
-                    label_th = Label(thanks, text='Thank you, your order was written!', bg='floral white',
+                    label_th = Label(thanks, text='Thank you, your order was written!\n'+tx, bg='floral white',
                                      font=('Lucida', 12, 'bold'),
                                      fg='bisque4')
                     label_th.pack()
@@ -310,13 +312,13 @@ def enter_cust(event):
 
     def bask(event=None):
         (cust_id, cust_name) = select[0]
-        s_dorder=mycursor.execute('''
+        s_dorder=list(mycursor.execute('''
         select order_id,date_ordered,total_price,paid from detail_order
         where costumer_id=? and paid='F'
-        ''', cust_id)
+        ''', cust_id))
         basket = Toplevel(root)
-        basket.title('Customer autorization')
-        basket.geometry('800x800')
+        basket.title('Basket')
+        basket.geometry('800x900')
 
         class Order:
             def __init__(self,window,order_id,date_ordered,total_price,x,y):
@@ -326,6 +328,9 @@ def enter_cust(event):
                 self.window=window
                 self.date_ordered=date_ordered
                 self.order_id=order_id
+                self.l_warn = Label(self.window, text='', bg='floral white',
+                                   font=('Lucida', 12, 'bold'),
+                                   fg='bisque4')
                 self.l_order = Label(self.window, text=f'{self.order_id}    {self.date_ordered}    {self.total_price}', bg='floral white',
                                      font=('Lucida', 12, 'bold'),
                                      fg='bisque4')
@@ -334,10 +339,40 @@ def enter_cust(event):
                 self.b_pay.bind('<Button-1>', self.pay)
                 self.b_paybb.bind('<Button-1>',self.paybb)
                 self.b_pay.pack()
+                self.b_cancel=Button(self.window, text='Cancel', bg='bisque4', font=('Lucida'), fg='black', width=8)
+                self.b_cancel.bind('<Button-1>', self.cancel)
+                self.b_cancel.pack()
                 self.b_paybb.pack()
                 self.l_order.place(x=self.x,y=self.y)
+                self.b_cancel.place(x=self.x+540,y=self.y)
                 self.b_pay.place(x=self.x+300,y=self.y)
                 self.b_paybb.place(x=self.x+420,y=self.y)
+
+            def cancel(self,event):
+                mycursor.execute('''
+                exec cancel_order @order_id=?     
+                ''',self.order_id)
+
+                res=list(mycursor.execute('''
+                if not EXISTS(select order_id from detail_order where order_id=?)
+                BEGIN
+                    select concat('The order ',?,' was canceled')
+                end
+                else
+                    select ''
+                ''',self.order_id,self.order_id))[0][0]
+
+                if res=='':
+                    self.l_warn['text']='Нельзя отменить заказ'
+                    self.l_warn.pack()
+                    self.l_warn.place(x=self.x + 660, y=self.y)
+                else:
+                    self.l_warn['text']=res
+                    self.l_warn.pack()
+                    self.l_warn.place(x=self.x + 660, y=self.y)
+                    self.window.destroy()
+                    bask()
+
 
             def pay(self,event):
                 mycursor.execute('''
@@ -383,13 +418,12 @@ def enter_cust(event):
                 l_att.pack()
                 l_att.place(x=25, y=100)
 
-        if list(s_dorder):
-            y = 10
-            for order_id,date_ordered,total_price,paid in s_dorder:
-                o=Order(basket,order_id,date_ordered,total_price,5,y)
-                y+=40
+        y = 10
+        for order_id,date_ordered,total_price,paid in s_dorder:
+            o=Order(basket,order_id,date_ordered,total_price,5,y)
+            y+=40
 
-        else:
+        if not s_dorder:
             l_em = Label(basket, text=f'У вас нет заказов',
                          bg='floral white',
                          font=('Lucida', 12, 'bold'),
@@ -463,8 +497,8 @@ def enter_cust(event):
                     # print(cust_id,self.id)
                     s_ch=tuple(mycursor.execute('''
                     SET NOCOUNT ON
-                    exec presents_trade @costumer_id = 1, @present_id = 1
-                    '''))[0][0]
+                    exec presents_trade @costumer_id = ?, @present_id = ?
+                    ''',cust_id,self.id))[0][0]
 
                     if s_ch=='Недостаточно бонусов!':
                         self.l_er['text'] = 'Недостаточно бонусов'
@@ -653,6 +687,20 @@ def purchase(event):
 ev=None
 purchase(ev)'''
 
+def bonus_cards(event):
+    w_bon_ad = Toplevel(root)
+    w_bon_ad.title('Bonuses')
+    w_bon_ad.geometry('300x300')
+    mycursor.execute('''
+            exec check_bonus
+            ''')
+    outp='\n'.join([str(cust_id)+'     '+str(bonuses)+'     '+str(open_date)+'      '+str(last_bonus) for (cust_id, bonuses, open_date, last_bonus, expire) in mycursor.execute('''
+            select costumer_id,bonuses,open_date,last_bonus, DATEDIFF(day, last_bonus, getdate()) from bonus_cards
+            ''')])
+    l_bon = Label(w_bon_ad, text=outp, bg='floral white', font=('Lucida', 12, 'bold'), fg='bisque4')
+    l_bon.pack()
+    l_bon.place(x=5,y=5)
+
 def enter_admin(event):
     login = entry_login_admin.get()
     password = entry_password_admin.get()
@@ -665,7 +713,7 @@ def enter_admin(event):
         button_discounts = Button(admins, text = 'Check discounts', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
         #button_discounts.bind('<Button-1>', discounts)
         button_cards = Button(admins, text='Check bonus cards', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
-        #button_cards.bind('<Button-1>', bonus_cards)
+        button_cards.bind('<Button-1>', bonus_cards)
         button_profit = Button(admins, text = 'Check month profit', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
         #button_profit.bind('<Button-1>', profit)
         button_costumer = Button(admins, text='Costumer controle', bg='bisque4', font=('Lucida', 11), fg='black', width=20)
