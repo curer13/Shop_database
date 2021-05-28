@@ -559,6 +559,40 @@ def enter_cust(event):
 
 '''admin'''
 
+def most_ordered(event):
+    global print2, entry_month
+    order = Toplevel(root)
+    order.title('Most ordered Item')
+    order.geometry('300x100')
+    order.configure(bg= 'floral white')
+    label = Label(order, text = 'Most ordered item in month', bg = 'floral white', font = ('Lucida', 12, 'bold'), fg = 'bisque4')
+    print = Label(order, text = 'Most ordered item in ', bg = 'floral white', font = ('Lucida', 11), fg = 'bisque4')
+    print2 = Label(order, text = 'is: ', bg = 'floral white', font = ('Lucida', 11), fg = 'bisque4')
+    button = Button(order, text = 'Check', bg = 'bisque4', font = ('Lucida', 11), fg = 'black')
+    entry_month = Entry(order, bg = 'bisque4', fg = 'floral white', width = 8)
+    button.bind('<Button-1>', most_ordered_check)
+    label.pack(side = 'top')
+    print.pack()
+    print2.pack()
+    button.pack()
+    entry_month.pack()
+    print.place(x = 5, y = 30)
+    entry_month.place(x = 150, y = 30)
+    print2.place(x = 200, y = 30)
+    button.place(x = 120, y = 55)
+
+def most_ordered_check(event):
+    print2['text'] = 'is: '
+    month = entry_month.get()
+    month = str(month)
+    sql = '''set nocount on EXEC most_sold ?'''
+    param = month
+    item = list(mycursor.execute(sql, param))
+    stock = str(item[0])
+    stock = stock.replace('(', '')
+    stock = stock.replace(', )', '')
+    print2['text'] += stock
+
 def admin(event):
     global entry_login_admin, entry_password_admin
     admin = Toplevel(root)
@@ -672,6 +706,9 @@ def enter_admin(event):
         print = Label(admins, text = 'Choose the command', bg = 'floral white', font = ('Lucida', 12, 'bold'), fg = 'bisque4')
         button_discounts = Button(admins, text = 'Check discounts', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
         button_discounts.bind('<Button-1>', discount)
+        button_most_sold = Button(admins, text='Most ordered items', bg='bisque4', font=('Lucida', 11), fg='black',
+                                  width=20)
+        button_most_sold.bind('<Button-1>', most_ordered)
         button_cards = Button(admins, text='Check bonus cards', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
         button_cards.bind('<Button-1>', bonus_cards)
         button_profit = Button(admins, text = 'Check month profit', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
@@ -689,12 +726,14 @@ def enter_admin(event):
         button_costumer.pack()
         button_purchase.pack()
         button_stock.pack()
+        button_most_sold.pack()
         button_discounts.place(x = 55, y = 30)
         button_cards.place(x = 55, y = 62)
         button_profit.place(x = 55, y = 94)
         button_costumer.place(x=55, y=126)
         button_purchase.place(x = 55, y = 158)
         button_stock.place(x = 55, y = 190)
+        button_most_sold.place(x=55, y=222)
 
 def discount(event):
     global discounts
