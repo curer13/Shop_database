@@ -681,6 +681,19 @@ create table discounts(
 	constraint fk_discounts foreign key(stock_id) references in_stock(stock_id),
 	discount integer
 )
+GO
+
+alter table discounts
+add last_date DATE
+GO
+
+alter table discounts
+alter column stock_id int NOT null
+GO
+
+alter table discounts
+add CONSTRAINT pk_discounts PRIMARY KEY(stock_id)
+GO
 
 create function new_price(@stock_id integer, @discount integer)
 returns decimal(10,2) as
@@ -690,12 +703,13 @@ begin
 	(select (sell_price - sell_price*@percent) from in_stock where stock_id = @stock_id)
 	return @price
 end
+GO
 
 create procedure set_discount as
 begin
 	declare @today date = convert(date, getdate())
 	declare @last_day date = (select distinct last_date from discounts)
-	if day(@today) = 5 and datediff(day, @last_day, @today) >= 28
+	if day(@today) = 28 and datediff(day, @last_day, @today) >= 28
 	begin
 		declare @max integer = (select max(stock_id) from discounts)
 		declare @i integer = 1
@@ -704,14 +718,16 @@ begin
 			if @i in (select stock_id from discounts)
 			begin
 				update in_stock set sell_price = 
-				(select i.sell_price/(1-d.discount/100) from in_stock i join discounts d on d.stock_id = i.stock_id where i.stock_id = @i)
+				(select dbo.old_price(@i, discount) from discounts where stock_id = @i)
 				where stock_id = @i
 			end
 			set @i = @i +1
 		end
 		delete from discounts
 	end
+	else select 'Discounts cannot be set today!'
 end
+GO
 
 create trigger new_discounts 
 on discounts
@@ -733,32 +749,48 @@ begin
 		set @i = @i+1
 	end
 end
+GO
 
+create function old_price(@stock_id integer, @discount integer)
+returns integer
+as begin
+	declare @new_discount decimal(10,2) = 1-(@discount*0.01)
+	declare @old_price integer = (select sell_price/@new_discount from in_stock where stock_id = @stock_id)
+	return @old_price
+end
+GO
+
+INSERT into discounts values(3,45,'01.04.2021')
+SELECT*from bonus_cards
 exec set_discount
+update discounts set last_date = '01.04.2021'
 select*from discounts
 select*from in_stock
 update discounts set last_date = '05.04.21'
-
-select stock_id, dbo.new_price(stock_id, 10) from in_stock
+GO
 
 /* 4 */
 create table accounts(
-	acc_id int PRIMARY KEY,
+	acc_id int,
 	acc_name VARCHAR(25),
-	wealth int
+	wealth int,
+	last_upd VARCHAR(25),
+	CONSTRAINT pk_accounts PRIMARY KEY(acc_id)
 )
 
 insert into accounts VALUES(1,'Boss',3000,'February')
 insert into accounts VALUES(2,'Shop',30000,'February')
 
 alter table accounts
-add last_upd VARCHAR(25)
+alter COLUMN last_upd NVARCHAR(25)
 
 select *from accounts
+GO
 
 create table employees(
-	emp_id int IDENTITY(1,1) primary key,
-	emp_wage int
+	emp_id int IDENTITY(1,1),
+	emp_wage int,
+	CONSTRAINT pk_employees PRIMARY KEY(emp_id)
 )
 
 insert into employees VALUES(1000)
@@ -767,10 +799,11 @@ insert into employees VALUES(800)
 insert into employees VALUES(800)
 
 select * from employees
+GO
 
 create FUNCTION profit_fun
-(@mes varchar(25))
-RETURNS @T table(profit_ int,mon_ VARCHAR(25))
+(@mes nvarchar(25))
+RETURNS @T table(profit_ int,mon_ NVARCHAR(25))
 as
 BEGIN
 	declare @emp_wages int=(select sum(emp_wage) from employees);
@@ -793,105 +826,130 @@ BEGIN
 	from dinam
 	RETURN
 END
+GO
 
-select * from dbo.profit_fun('April')
-select * from detail_order
+select * from dbo.profit_fun(N'Май')
+select DATENAME(month,date_ordered) from detail_order
 
 drop PROCEDURE month_profit
+GO
 
 create PROCEDURE month_profit
-@mes VARCHAR(25)
+@mes NVARCHAR(25)
 as
 BEGIN
-declare @p int=(select profit_ from dbo.profit_fun(@mes))
-update accounts
-set wealth=wealth+0.5*@p,
-last_upd=@mes
-where dbo.fn_month_name_to_number(@mes)>dbo.fn_month_name_to_number(last_upd)
-and @p is not null
+	declare @p int=(select profit_ from dbo.profit_fun(@mes))
+	declare @last_upd nvarchar(25)=(select last_upd from accounts where acc_id=1)
+	if dbo.fn_month_name_to_number(@mes)>dbo.fn_month_name_to_number(@last_upd)
+	BEGIN
+		update accounts
+		set wealth=wealth+0.5*@p,
+		last_upd=@mes
+		where @p is not null
+	END
+END
+GO
+
+create trigger profit_split_info
+on accounts
+after UPDATE
+as
+BEGIN
+	SELECT N'Прибыль была распределена по аккаунтам'
 END
 
-exec month_profit 'May'
+drop TRIGGER profit_split_info
 
+exec month_profit N'Май'
+
+select * from dbo.profit_fun('May')
+
+UPDATE accounts
+set last_upd=N'Февраль'
+
+declare @m nvarchar(25)=datename(month,getdate())
+select * from dbo.profit_fun(@m)
+
+exec month_profit @mes=@m
 SELECT * from accounts
+GO
 
-create function fn_month_name_to_number (@monthname varchar(25))
+create function fn_month_name_to_number (@monthname nvarchar(25))
 returns int as
 begin
 declare @monthno as int;
 select @monthno =
-case @monthname
-when 'January' then 1
-when 'February' then 2
-when 'March' then 3
-when 'April' then 4
-when 'May' then 5
-when 'June' then 6
-when 'July' then 7
-when 'August' then 8
-when 'September' then 9
-when 'October' then 10
-when 'November' then 11
-when 'December' then 12
+case
+when @monthname='January' or @monthname=N'Январь' then 1
+when @monthname='February' or @monthname=N'Февраль' then 2
+when @monthname='March' or @monthname=N'Март' then 3
+when @monthname='April' or @monthname=N'Апрель' then 4
+when @monthname='May' or @monthname=N'Май' then 5
+when @monthname='June' or @monthname=N'Июнь' then 6
+when @monthname='July' or @monthname=N'Июль' then 7
+when @monthname='August' or @monthname=N'Август' then 8
+when @monthname='September' or @monthname=N'Сентябрь' then 9
+when @monthname='October' or @monthname=N'Октябрь' then 10
+when @monthname='November' or @monthname=N'Ноябрь' then 11
+when @monthname='December' or @monthname=N'Декабрь' then 12
 end
 return @monthno
 end
+GO
 
-select dbo.fn_month_name_to_number('May')
+drop function fn_month_name_to_number
 
+
+select dbo.fn_month_name_to_number(N'Май')
+GO
 
 /* 6 */
-CREATE PROCEDURE controll as
-begin
-    SELECT SUM(total_price) FROM detail_order ;   
-end
-create table his( 
-orders char(20)null,
-new_total_price float null,
-old_total_price float null,
-date datetime null
-);
-create trigger history
-on detail_order
-after update as if update(total_price) 
-begin
-    declare @new_total_price float
- declare @old_total_price float
- declare @orders char(20)
- select @new_total_price=(select total_price from inserted)
- select @old_total_price =(select total_price from deleted)
- select @orders = (select order_id from deleted )
- insert into his values(@orders,@new_total_price,@old_total_price,getdate())
- end
-CREATE FUNCTION cheking (@the_profit integer)
-RETURNS VARCHAR(40) as
-    BEGIN
-     DECLARE @sf_value VARCHAR(40);
-        IF @the_profit >= 0
-            SET @sf_value = 'Mozhno prodolzhit';
-        ELSE
-            SET @sf_value = 'Ne rekomenduetsya prodolzhat';
-     RETURN @sf_value;
-    END
 
-/*create trigger otmena 
-on detail_order
-after delete as
-begin
-	insert into his (orders,new_total_price,old_total_price,date)
-	select order_id,'отменен товар на сумму'+total_price  from deleted
-end*/
+create FUNCTION fn_check_delivery_date
+(@order_id int)
+RETURNS DATE
+as
+BEGIN
+	DECLARE @date DATE
+	set @date=(select date_delivered from detail_order where order_id=@order_id)
+	RETURN @date
+END
+GO
 
+create FUNCTION fn_check_paid
+(@order_id int)
+RETURNS VARCHAR(1)
+as
+BEGIN
+	DECLARE @paid VARCHAR(1)
+	set @paid=(select paid from detail_order where order_id=@order_id)
+	RETURN @paid
+END
+GO
 
-create table admins (
-	login varchar(20),
-	password varchar(30)
-)
+select dbo.fn_check_delivery_date(1)
+select dbo.fn_check_paid(1)
+GO
 
-insert into admins values('a_anarbekova', 'Abcdefg1234')
-insert into admins values('e_kurmangali', 'Qwerty8910')
+create procedure proc_deliver
+(@order_id INT)
+as
+BEGIN
+	DECLARE @date date=dbo.fn_check_delivery_date(@order_id)
+	DECLARE @paid varchar(1)=dbo.fn_check_paid(@order_id)
+	if @date is NULL and @paid='T'
+	BEGIN
+		update detail_order
+		set date_delivered=GETDATE()
+		where order_id=@order_id
+	END
+END
 
-select*from costumers
+EXEC proc_deliver @order_id=2029
+GO
+
+select*From detail_order
+SELECT*From orders
 GO
 
 /*7*/
@@ -1065,3 +1123,5 @@ INSERT into detail_order values(getdate(),null,1,12000,'F','F')
 insert into orders VALUES(2058,5,7)
 
 exec online_order @costumer_id = 1
+
+select*from custs_login

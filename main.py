@@ -95,11 +95,9 @@ def new_user(event):
             x = str(x)
             x = x.replace('(', '')
             x = x.replace(', )', '')
-            costumers.append(int(x))
+            costumers.append(x)
 
         id = max(costumers)
-
-        # print(id)
 
         mycursor.execute("insert into custs_login values('%s','%s','%s')" % (int(id), str(login), str(password)))
 
@@ -109,45 +107,6 @@ def new_user(event):
         mistake.configure(bg='floral white')
         print = Label(mistake, text='Registered successfully with id: "%s"' % (str(id)), bg='floral white', font=('Lucida', 12, 'bold'), fg='bisque4')
         print.pack(fill=BOTH)
-
-def user(event):
-    global entry_login_user, entry_password_user
-    user = Toplevel(root)
-    user.title('User autorization')
-    user.geometry('300x120')
-    user.configure(bg='RosyBrown1')
-    label_login = Label(user, text = 'login', bg = 'RosyBrown1', font = ('Lucida', 10), fg = 'purple')
-    label_password = Label(user, text = 'password', bg = 'RosyBrown1', font = ('Lucida', 10), fg = 'purple')
-    entry_login_user = Entry(user, bg = 'mistyrose')
-    entry_password_user = Entry(user, bg = 'mistyrose')
-    button = Button(user, text = 'Enter', bg = 'mistyrose', font = ('Lucida', 10), fg = 'purple', width = 8)
-    button.bind('<Button-1>', enter)
-    label_login.pack()
-    entry_login_user.pack()
-    label_password.pack()
-    entry_password_user.pack()
-    button.pack()
-    label_login.place(x = 30, y = 10)
-    entry_login_user.place(x = 150, y = 10)
-    label_password.place(x = 30, y = 50)
-    entry_password_user.place(x = 150, y = 50)
-    button.place(x = 120, y = 90)
-
-def enter(event):
-    login = entry_login_user.get()
-    password = entry_password_user.get()
-    data = mycursor.execute('select name, surname from users')
-    if check_old_user(login,password):
-        all_data = Toplevel(root)
-        all_data.title('User autorised')
-        all_data.geometry('300x120')
-        all_data.configure(bg='RosyBrown1')
-        print = Label(all_data, text = 'Autorised successfully', bg = 'RosyBrown1', font = ('Lucida', 10), fg = 'purple')
-        print['text'] += '\n'
-        for i in data:
-            print['text'] += str(i)
-            print['text'] += '\n'
-        print.pack(fill = BOTH)
 
 def customer(event):
     global entry_login_cust, entry_password_cust
@@ -380,6 +339,11 @@ def enter_cust(event):
                 set paid='T'
                 where order_id=?
                 ''',self.order_id)
+
+                mycursor.execute('''
+                exec proc_deliver @order_id=?
+                ''',self.order_id)
+
                 th = Toplevel(root)
                 th.title('Thank you!')
                 th.geometry('200x200')
@@ -398,10 +362,16 @@ def enter_cust(event):
                 mycursor.execute('''
                 exec pay_by_bonuses @order_id = ?
                 ''',self.order_id)
+
+                mycursor.execute('''
+                exec proc_deliver @order_id=?
+                ''', self.order_id)
+
                 res=tuple(mycursor.execute('''
                 select paid from detail_order
                 where order_id=?
                 ''',self.order_id))[0][0]
+
                 att = Toplevel(root)
                 att.title('Attention!')
                 att.geometry('200x200')
@@ -439,95 +409,106 @@ def enter_cust(event):
         mycursor.execute('''
         exec check_bonus
         ''')
-        (bonuses,open_date,last_bonus,expire)=tuple(mycursor.execute('''
+        s_bon=list(mycursor.execute('''
         select bonuses,open_date,last_bonus, DATEDIFF(day, last_bonus, getdate()) from bonus_cards
         where costumer_id=?
-        ''',cust_id))[0]
+        ''',cust_id))
 
-        exp=''
-        if expire>=3:
-            exp='\nВаши бонусы будут обнулены в связи того что их больше 10,000 и с последней покупки прошло 3 дня'
-        l_bon = Label(w_bon, text=f'{bonuses}   {open_date}    {last_bonus}{exp}',
+        info=''
+        if s_bon:
+            (bonuses, open_date, last_bonus, expire)=s_bon[0]
+            exp = ''
+            if expire >= 3:
+                exp = '\nВаши бонусы будут обнулены в связи того что их больше 10,000 и с последней покупки прошло 3 дня'
+            info=f'{bonuses}   {open_date}    {last_bonus}{exp}'
+
+            def present(event):
+                w_pres = Toplevel(root)
+                w_pres.title('Presents')
+                w_pres.geometry('800x800')
+                s_pres = mycursor.execute('''
+                select present_id, present_name,present_price from presents
+                ''')
+                l_bon = Label(w_pres, text=str(bonuses),
+                              bg='floral white',
+                              font=('Lucida', 12, 'bold'),
+                              fg='bisque4')
+
+                class Present:
+                    def __init__(self, window, id, name, price, x, y):
+                        self.id = id
+                        self.name = name
+                        self.price = price
+                        self.window = window
+                        self.x = x
+                        self.y = y
+                        self.b_ch = Button(self.window, text='Обменять', bg='bisque4', font=('Lucida'), fg='black',
+                                           width=8)
+                        self.l_pr = Label(self.window, text=self.name + '   ' + str(self.price),
+                                          bg='floral white',
+                                          font=('Lucida', 12, 'bold'),
+                                          fg='bisque4')
+                        self.l_er = Label(self.window, text='',
+                                          bg='floral white',
+                                          font=('Lucida', 12, 'bold'),
+                                          fg='bisque4')
+                        self.b_ch.bind('<Button-1>', self.chan)
+                        self.b_ch.pack()
+                        self.l_er.pack()
+                        self.l_pr.pack()
+                        self.b_ch.place(x=self.x + 100, y=self.y)
+                        self.l_pr.place(x=self.x, y=self.y)
+                        self.l_er.place(x=self.x + 200, y=self.y)
+
+                    def chan(self, event):
+                        '''if bonuses < self.price:
+                            self.l_er['text'] = 'Недостаточно бонусов'
+                        else:'''
+                        # print(cust_id,self.id)
+                        s_ch = tuple(mycursor.execute('''
+                        SET NOCOUNT ON
+                        exec presents_trade @costumer_id = ?, @present_id = ?
+                        ''', cust_id, self.id))[0][0]
+
+                        if s_ch == 'Недостаточно бонусов!':
+                            self.l_er['text'] = 'Недостаточно бонусов'
+                        else:
+                            w_succ = Toplevel(root)
+                            w_succ.title('Attention!')
+                            w_succ.geometry('200x200')
+                            l_succ = Label(w_succ, text='Бонусы успешно были обменены на подарок',
+                                           bg='floral white',
+                                           font=('Lucida', 12, 'bold'),
+                                           fg='bisque4')
+                            l_succ.pack()
+                            l_succ.place(x=0, y=100)
+                            w_pres.destroy()
+                            w_bon.destroy()
+                            # present(None)
+                            bonus(None)
+
+                y = 40
+                for present_id, present_name, present_price in s_pres:
+                    pr = Present(w_pres, present_id, present_name, present_price, 5, y)
+                    y += 40
+
+                l_bon.pack()
+                l_bon.place(x=400, y=0)
+
+            button_change = Button(w_bon, text='Обменять на подарки', bg='bisque4', font=('Lucida'), fg='black',
+                                   width=8)
+            button_change.bind('<Button-1>', present)
+            button_change.pack()
+        else:
+            info='У вас нет бонусов!'
+
+
+        l_bon = Label(w_bon, text=info,
                      bg='floral white',
                      font=('Lucida', 12, 'bold'),
                      fg='bisque4')
         l_bon.pack()
         l_bon.place(x=25, y=100)
-
-        def present(event):
-            w_pres = Toplevel(root)
-            w_pres.title('Presents')
-            w_pres.geometry('800x800')
-            s_pres=mycursor.execute('''
-            select present_id, present_name,present_price from presents
-            ''')
-            l_bon = Label(w_pres, text=str(bonuses),
-                           bg='floral white',
-                           font=('Lucida', 12, 'bold'),
-                           fg='bisque4')
-            class Present:
-                def __init__(self,window,id,name,price,x,y):
-                    self.id=id
-                    self.name=name
-                    self.price=price
-                    self.window=window
-                    self.x=x
-                    self.y=y
-                    self.b_ch = Button(self.window, text='Обменять', bg='bisque4', font=('Lucida'), fg='black', width=8)
-                    self.l_pr=Label(self.window, text=self.name+'   '+str(self.price),
-                            bg='floral white',
-                            font=('Lucida', 12, 'bold'),
-                            fg='bisque4')
-                    self.l_er = Label(self.window, text='',
-                                      bg='floral white',
-                                      font=('Lucida', 12, 'bold'),
-                                      fg='bisque4')
-                    self.b_ch.bind('<Button-1>', self.chan)
-                    self.b_ch.pack()
-                    self.l_er.pack()
-                    self.l_pr.pack()
-                    self.b_ch.place(x=self.x+100,y=self.y)
-                    self.l_pr.place(x=self.x,y=self.y)
-                    self.l_er.place(x=self.x+200,y=self.y)
-
-                def chan(self, event):
-                    '''if bonuses < self.price:
-                        self.l_er['text'] = 'Недостаточно бонусов'
-                    else:'''
-                    # print(cust_id,self.id)
-                    s_ch=tuple(mycursor.execute('''
-                    SET NOCOUNT ON
-                    exec presents_trade @costumer_id = ?, @present_id = ?
-                    ''',cust_id,self.id))[0][0]
-
-                    if s_ch=='Недостаточно бонусов!':
-                        self.l_er['text'] = 'Недостаточно бонусов'
-                    else:
-                        w_succ = Toplevel(root)
-                        w_succ.title('Attention!')
-                        w_succ.geometry('200x200')
-                        l_succ = Label(w_succ, text='Бонусы успешно были обменены на подарок',
-                                      bg='floral white',
-                                      font=('Lucida', 12, 'bold'),
-                                      fg='bisque4')
-                        l_succ.pack()
-                        l_succ.place(x=0,y=100)
-                        w_pres.destroy()
-                        w_bon.destroy()
-                        # present(None)
-                        bonus(None)
-
-            y=40
-            for present_id, present_name,present_price in s_pres:
-                pr=Present(w_pres,present_id,present_name,present_price,5,y)
-                y+=40
-
-            l_bon.pack()
-            l_bon.place(x=400, y=0)
-
-        button_change = Button(w_bon, text='Обменять на подарки', bg='bisque4', font=('Lucida'), fg='black', width=8)
-        button_change.bind('<Button-1>', present)
-        button_change.pack()
 
     def my_pres(event):
         (cust_id, cust_name) = select[0]
@@ -540,8 +521,11 @@ def enter_cust(event):
         on pb.present_id=p.present_id
         where costumer_id=?
         ''',cust_id))
+        print(pr_l)
         if pr_l:
             pr_name='\n'.join([pr[0] for pr in pr_l])
+        else:
+            pr_name='У вас нет подарков'
         l_mpr = Label(w_mpr, text=pr_name,
                       bg='floral white',
                       font=('Lucida', 12, 'bold'),
@@ -618,12 +602,138 @@ def check_admin(login,password):
         print.pack(fill=BOTH)
         return 0
 
+def bonus_cards(event):
+    s_bon = list(mycursor.execute('''
+            select * from bonus_cards
+            '''))
+    w_bon = Toplevel(root)
+    w_bon.title('Bonuses')
+    w_bon.geometry('800x800')
+    w_bon.configure(bg='floral white')
+    if s_bon:
+        tx='\n'.join(str(cust_id)+'     '+str(bonuses)+'    '+str(op_date)+'    '+str(last_date) for cust_id,bonuses,op_date,last_date in s_bon)
+    else:
+        tx='No bonuses'
+    label_bon = Label(w_bon, text = tx, bg = 'floral white', font = ('Lucida', 10, 'bold'), fg = 'bisque4')
+    label_bon.pack()
+    label_bon.place(x=5,y=5)
+
+def profit(event):
+    (mycursor.execute('''
+    declare @m nvarchar(25)=datename(month,getdate())
+    exec month_profit @mes=@m
+    '''))
+    w_prof = Toplevel(root)
+    w_prof.title('Users control')
+    w_prof.geometry('500x500')
+    w_prof.configure(bg='floral white')
+    label_accs = Label(w_prof, text='', bg='floral white', font=('Lucida', 10, 'bold'), fg='bisque4')
+    e_mes = Entry(w_prof, bg = 'bisque4', fg = 'floral white')
+    e_mes.pack()
+    e_mes.place(x=200, y=5)
+    def calcProf(event):
+        mes=e_mes.get()
+        print(mes)
+        s_showp=list(mycursor.execute('''
+        select * from dbo.profit_fun(?)
+        ''',mes))
+        if s_showp:
+            tx=s_showp[0][0]
+            print(tx)
+            label_message = Label(w_prof, text='', bg='floral white', font=('Lucida', 10, 'bold'), fg='bisque4')
+            label_message['text']=str(tx)
+            label_message.pack()
+            label_message.place(x=200, y=50)
+
+    button_prof = Button(w_prof, text='Show profit', bg='bisque4', font=('Lucida', 11), fg='black', width=20)
+    button_prof.bind('<Button-1>', calcProf)
+    button_prof.pack()
+    button_prof.place(x=200,y=200)
+
+
+    s_acc=list(mycursor.execute('''
+    select acc_name,wealth,last_upd from accounts
+    '''))
+    tx_acc='\n'.join([str(acc_name)+'   '+str(wealth)+'     '+str(last_upd) for acc_name,wealth,last_upd in s_acc])
+    label_accs['text']=tx_acc
+    label_accs.pack()
+    label_accs.place(x=200, y=100)
+
+
+
+def enter_admin(event):
+    login = entry_login_admin.get()
+    password = entry_password_admin.get()
+    if check_admin(login, password):
+        admins = Toplevel(root)
+        admins.title('Users control')
+        admins.geometry('300x250')
+        admins.configure(bg='floral white')
+        print = Label(admins, text = 'Choose the command', bg = 'floral white', font = ('Lucida', 12, 'bold'), fg = 'bisque4')
+        button_discounts = Button(admins, text = 'Check discounts', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
+        button_discounts.bind('<Button-1>', discount)
+        button_cards = Button(admins, text='Check bonus cards', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
+        button_cards.bind('<Button-1>', bonus_cards)
+        button_profit = Button(admins, text = 'Check month profit', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
+        button_profit.bind('<Button-1>', profit)
+        button_costumer = Button(admins, text='Costumer controle', bg='bisque4', font=('Lucida', 11), fg='black', width=20)
+        button_costumer.bind('<Button-1>', costumers_controle)
+        button_purchase = Button(admins, text='Make purchase', bg='bisque4', font=('Lucida', 11), fg='black', width=20)
+        button_purchase.bind('<Button-1>', purchase)
+        button_stock = Button(admins, text='Check stock', bg='bisque4', font=('Lucida', 11), fg='black', width=20)
+        button_stock.bind('<Button-1>', stock)
+        print.pack(side = 'top')
+        button_discounts.pack()
+        button_cards.pack()
+        button_profit.pack()
+        button_costumer.pack()
+        button_purchase.pack()
+        button_stock.pack()
+        button_discounts.place(x = 55, y = 30)
+        button_cards.place(x = 55, y = 62)
+        button_profit.place(x = 55, y = 94)
+        button_costumer.place(x=55, y=126)
+        button_purchase.place(x = 55, y = 158)
+        button_stock.place(x = 55, y = 190)
+
+def discount(event):
+    global discounts
+    discount = Toplevel(root)
+    discount.title('Discount')
+    discount.geometry('300x300')
+    discount.configure(bg='floral white')
+    label = Label(discount, text = 'Discounts', bg = 'floral white', font = ('Lucida', 12, 'bold'), fg = 'bisque4')
+    discounts = Label(discount, text = 'Product    discount(%) \n', bg = 'floral white', font = ('Lucida', 11), fg = 'bisque4')
+    new_discounts = Button(discount, bg = 'bisque4', text = 'Set new discounts', font = ('Lucida', 11), fg = 'black', width = 15)
+    result = mycursor.execute('select stock_id, discount from discounts')
+    for x,y in result:
+        if x < 10:
+            discounts['text'] += f' {x}         '
+        else:
+            discounts['text'] += f' {x}        '
+        discounts['text'] += f'{y}   \n'
+    new_discounts.bind('<Button-1>', new_discount)
+    label.pack(side='top')
+    new_discounts.pack(side='top')
+    discounts.pack()
+
+def new_discount(event):
+    mycursor.execute('exec set_discount')
+    discounts['text'] = 'Product    discount(%) \n'
+    result = mycursor.execute('select stock_id, discount from discounts')
+    for x, y in result:
+        if x < 10:
+            discounts['text'] += f' {x}         '
+        else:
+            discounts['text'] += f' {x}        '
+        discounts['text'] += f'{y}   \n'
 
 def stock(event):
-    needs=mycursor.execute('''
+    needs=list(mycursor.execute('''
     exec stock_to_buy
-    ''')
-    n = '\n'.join([str(need[0]) for need in needs])
+    '''))
+    if needs:
+        n = '\n'.join([str(need[0]) for need in needs])
     in_s=mycursor.execute('''
     select stock_id, stock_q from in_stock
     ''')
@@ -683,59 +793,6 @@ def purchase(event):
     button_enter.place(x=120, y=140)
     label_del.place(x=120,y=190)
 
-'''root = Tk()
-ev=None
-purchase(ev)'''
-
-def bonus_cards(event):
-    w_bon_ad = Toplevel(root)
-    w_bon_ad.title('Bonuses')
-    w_bon_ad.geometry('300x300')
-    mycursor.execute('''
-            exec check_bonus
-            ''')
-    outp='\n'.join([str(cust_id)+'     '+str(bonuses)+'     '+str(open_date)+'      '+str(last_bonus) for (cust_id, bonuses, open_date, last_bonus, expire) in mycursor.execute('''
-            select costumer_id,bonuses,open_date,last_bonus, DATEDIFF(day, last_bonus, getdate()) from bonus_cards
-            ''')])
-    l_bon = Label(w_bon_ad, text=outp, bg='floral white', font=('Lucida', 12, 'bold'), fg='bisque4')
-    l_bon.pack()
-    l_bon.place(x=5,y=5)
-
-def enter_admin(event):
-    login = entry_login_admin.get()
-    password = entry_password_admin.get()
-    if check_admin(login, password):
-        admins = Toplevel(root)
-        admins.title('Users control')
-        admins.geometry('300x250')
-        admins.configure(bg='floral white')
-        print = Label(admins, text = 'Choose the command', bg = 'floral white', font = ('Lucida', 12, 'bold'), fg = 'bisque4')
-        button_discounts = Button(admins, text = 'Check discounts', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
-        #button_discounts.bind('<Button-1>', discounts)
-        button_cards = Button(admins, text='Check bonus cards', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
-        button_cards.bind('<Button-1>', bonus_cards)
-        button_profit = Button(admins, text = 'Check month profit', bg = 'bisque4', font = ('Lucida',11), fg = 'black', width = 20)
-        #button_profit.bind('<Button-1>', profit)
-        button_costumer = Button(admins, text='Costumer controle', bg='bisque4', font=('Lucida', 11), fg='black', width=20)
-        button_costumer.bind('<Button-1>', costumers_controle)
-        button_purchase = Button(admins, text='Make purchase', bg='bisque4', font=('Lucida', 11), fg='black', width=20)
-        button_purchase.bind('<Button-1>', purchase)
-        button_stock = Button(admins, text='Check stock', bg='bisque4', font=('Lucida', 11), fg='black', width=20)
-        button_stock.bind('<Button-1>', stock)
-        print.pack(side = 'top')
-        button_discounts.pack()
-        button_cards.pack()
-        button_profit.pack()
-        button_costumer.pack()
-        button_purchase.pack()
-        button_stock.pack()
-        button_discounts.place(x = 55, y = 30)
-        button_cards.place(x = 55, y = 62)
-        button_profit.place(x = 55, y = 94)
-        button_costumer.place(x=55, y=126)
-        button_purchase.place(x = 55, y = 158)
-        button_stock.place(x = 55, y = 190)
-
 def costumers_controle(event):
     costumers = Toplevel(root)
     costumers.title('Costumers control')
@@ -786,7 +843,6 @@ def delete_user(event):
         costumers.append(x)
 
     if ID in costumers:
-        mycursor.execute("delete from custs_login where cust_id = '%s'" % (ID))
         mycursor.execute("delete from costumers where costumer_id = '%s'" % (ID))
         mistake = Toplevel(root)
         mistake.title('Messenge')
@@ -864,9 +920,9 @@ def update_user(event):
         if address_new != '':
             mycursor.execute("update costumers set costumer_address = '%s' where costumer_id = '%s'" % (address_new, id_old))
         if login_new != '':
-            mycursor.execute("update custs_login set login = '%s' where cust_id = '%s'" % (login_new, id_old))
+            mycursor.execute("update custs_login set login = '%s' where costumer_id = '%s'" % (login_new, id_old))
         if password_new != '':
-            mycursor.execute("update custs_login set PASSWORD = '%s' where cust_id = '%s'" % (password_new, id_old))
+            mycursor.execute("update custs_login set PASSWORD = '%s' where costumer_id = '%s'" % (password_new, id_old))
         mistake = Toplevel(root)
         mistake.title('Messenge')
         mistake.geometry('300x40')
