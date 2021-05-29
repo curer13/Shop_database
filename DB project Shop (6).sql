@@ -54,12 +54,6 @@ create table defaulters (
 	constraint pk_defaulters primary key(defaulter_id)
 )
 
-create table profit (
-	the_month varchar(10),
-	constraint pk_profit primary key(the_month),
-	the_profit integer
-)
-
 create table purchase_date (
 	buyer_id integer,
 	stock_id integer,
@@ -155,8 +149,6 @@ begin
 	set @a = @a+1
 end
 
-select * from detail_order
-
 insert into defaulters (order_id) select order_id from detail_order where paid like 'F' 
 and order_id not in (select order_id from defaulters)
 
@@ -172,13 +164,9 @@ BEGIN
 END
 GO
 
-select buyer_id,stock_id,quantity,dbo.comf_date(purchase_date) as purch_date from purchase_date
-
 insert into purchase_date VALUES (1,3,1000,'01.01.2021')
 insert into purchase_date VALUES (2,10,2000,'03.01.2021')
 insert into purchase_date VALUES (1,5,3000,'05.01.2021')
-
-select * from profit
 
 alter table profit
 drop pk_profit
@@ -197,8 +185,6 @@ from in_stock i join buyer_stock b on i.stock_id = b.stock_id
 join orders o on i.stock_id = o.stock_id
 join detail_order d on d.order_id = o.order_id
 where DateName( month , DateAdd( month , month(d.date_ordered) , 0 ) - 1 ) = the_month)
-
-select*from profit
 
 alter table buyer_stock add constraint fk_bs foreign key(stock_id) references in_stock(stock_id)
 alter table buyer_stock add constraint fk_buyerstock foreign key(buyer_id) references buyer_info(buyer_id)
@@ -248,12 +234,7 @@ create table to_buy(
 alter table to_buy
 add CONSTRAINT fk_tb FOREIGN KEY(stock_id) REFERENCES in_stock(stock_id)
 
-select*from in_stock
-
 create index ix_stock_q on in_stock(stock_q)
-
-select*from to_buy
-select*from buyer_stock
 GO
 
 create trigger purchase_done
@@ -290,8 +271,6 @@ begin
 end
 GO
 
---drop TRIGGER to_buy_insert_delete
-
 create function stock_name
 (@id integer)
 returns varchar(10) as
@@ -319,10 +298,6 @@ begin
 end
 GO
 
-drop PROCEDURE stock_to_buy
-
-DELETE from purchase_date WHERE purchase_date='25.05.2021'
-
 update in_stock set stock_q = 45 where stock_id = 4 or stock_id = 8
 exec stock_to_buy
 select*from to_buy
@@ -330,14 +305,6 @@ select*from purchase_date
 set LANGUAGE russian;
 insert into purchase_date values(3,4,1000,'23.04.21')
 insert into purchase_date values(4,8,1000,GETDATE())
-
-SELECT*From purchase_date
-SELECT*from to_buy
-SELECT*from in_stock
-SELECT*from buyer_stock
-
-select buyer_id from buyer_stock
-where stock_id=3
 
 /*5*/
 create table order_status(
@@ -354,8 +321,6 @@ insert into order_status values('C', N'Сбор заказа')
 insert into order_status values('S', N'Отправка заказа')
 insert into order_status values('D', N'Заказ выполнен')
 
-select*from orders
-select*from detail_order
 alter table detail_order add Status varchar(5)
 update detail_order set status = 'D'
 alter table detail_order add constraint fk_do_status foreign key(Status) references order_status(status) 
@@ -378,8 +343,6 @@ begin
 	declare @date date = convert(date, getdate())
 	insert into detail_order values(@date, null, @costumer_id, null, 'F', 'F')
 end
-
-select * from detail_order
 GO
 
 create trigger paid_status
@@ -417,29 +380,16 @@ begin
 end
 GO
 
---DBCC TRACEON (2528, -1)
-
---delete from detail_order WHERE order_id=1006
-
-select*from order_status
-select*from in_stock
-select*from detail_order
-select*from orders
 exec online_order @costumer_id = 3
 exec online_order @costumer_id = 1
-select*from orders
+
 insert into orders values(1007,1,100)
 insert into orders values(1007,6,300)
 insert into orders values(1007,3,30)
 insert into orders values(1007,2,30)
 
-SELECT * from costumers
-
 insert into orders values((select max(order_id) from detail_order),1,100)
-update detail_order set paid = 'T' where order_id = 1007
-update detail_order set date_delivered = '25.05.21' where order_id = 1007
 
-select*from costumers
 /*3*/
 select*from detail_order
 create table bonus_cards(
@@ -485,8 +435,6 @@ begin
 end
 GO
 
---select *from order_status
-
 create trigger bonus_update
 on detail_order
 after insert, update as
@@ -530,8 +478,6 @@ begin
 end
 GO
 
---drop trigger presents_bonus_trade
-
 create function cost_name (@id integer)
 returns varchar(20) as
 begin
@@ -557,8 +503,6 @@ begin
 	end
 end
 GO
-
---drop proc pay_by_bonuses
 
 create procedure presents_trade (@costumer_id integer, @present_id integer) as
 begin
@@ -611,15 +555,6 @@ GO
 
 set LANGUAGE russian
 
-select*from in_stock
-SELECT*from orders
-
-update detail_order
-set paid='T'
-where order_id=1015
-
-set LANGUAGE russian
-
 update detail_order
 set date_delivered='26.05.2021'
 where order_id=1016
@@ -638,42 +573,6 @@ select p.present_name from presents_bonus pb
 join presents p
 on pb.present_id=p.present_id
 where costumer_id=1
-
-exec online_order @costumer_id = 1
-insert into orders values (2016, 10, 1)
-exec pay_by_bonuses @order_id = 2021
-exec presents_trade @costumer_id = 1, @present_id = 1
-exec presents_trade @costumer_id = 1, @present_id = 4
-exec online_order @costumer_id = 3
-insert into orders values (1012, 5, 1)
-update bonus_cards set bonuses = 200000 where costumer_id = 1
-exec pay_by_bonuses @order_id = 
-update detail_order set status = 'D' where order_id = 25
-
-exec presents_trade @costumer_id = 3, @present_id = 2
-exec presents_trade @costumer_id = 4, @present_id = 2
-exec online_order @costumer_id = 4
-insert into orders values(24, 3, 20)
-
-update bonus_cards set open_date = '02.05.2020' where costumer_id = 1
-exec online_order @costumer_id = 4
-insert into orders values (22, 5, 10)
-insert into orders values (22, 2, 10)
-update detail_order set status = 'D' where order_id = 22
-exec check_bonus
-select*from detail_order
-select*from bonus_cards
-update bonus_cards set bonuses = 15470 where costumer_id = 4
-update bonus_cards set last_bonus = '30.04.2021' where costumer_id = 3
-
-insert into detail_order VALUES('30.05.2021',null,1,100,'T','D')
-exec check_bonus
-
-exec online_order @costumer_id = 4
-insert into orders values (23, 5, 5)
-exec pay_by_bonuses 23
-
-select*from presents
 
 /*2*/
 create table discounts(
@@ -760,15 +659,6 @@ as begin
 end
 GO
 
-INSERT into discounts values(3,45,'01.04.2021')
-SELECT*from bonus_cards
-exec set_discount
-update discounts set last_date = '01.04.2021'
-select*from discounts
-select*from in_stock
-update discounts set last_date = '05.04.21'
-GO
-
 /* 4 */
 create table accounts(
 	acc_id int,
@@ -783,8 +673,6 @@ insert into accounts VALUES(2,'Shop',30000,'February')
 
 alter table accounts
 alter COLUMN last_upd NVARCHAR(25)
-
-select *from accounts
 GO
 
 create table employees(
@@ -828,12 +716,6 @@ BEGIN
 END
 GO
 
-select * from dbo.profit_fun(N'Май')
-select DATENAME(month,date_ordered) from detail_order
-
-drop PROCEDURE month_profit
-GO
-
 create PROCEDURE month_profit
 @mes NVARCHAR(25)
 as
@@ -858,19 +740,10 @@ BEGIN
 	SELECT N'Прибыль была распределена по аккаунтам'
 END
 
-drop TRIGGER profit_split_info
-
-exec month_profit N'Май'
-
-select * from dbo.profit_fun('May')
-
-UPDATE accounts
-set last_upd=N'Февраль'
-
 declare @m nvarchar(25)=datename(month,getdate())
 select * from dbo.profit_fun(@m)
 
-exec month_profit @mes=@m
+exec month_profit @mes='May'
 SELECT * from accounts
 GO
 
@@ -989,13 +862,6 @@ as begin
 	else select 'Order does not exist'
 end
 
-set nocount on
-exec cancel_order @order_id=2029
-if EXISTS(select order_id from detail_order where order_id=2029)
-BEGIN
-	select 'The order '+'2029'+' was canceled'
-end
-
 SELECT*from defaulters
 SELECT*from detail_order
 GO
@@ -1017,8 +883,6 @@ select*from detail_order
 select*from bonus_cards
 select*from orders
 select*from in_stock
-exec cancel_order @order_id = 2028
-
 select*from presents_bonus
 select*from detail_order
 
@@ -1116,12 +980,3 @@ END
 
 select *from detail_order
 select*from orders
-
-SELECT *from dbo.fn_check_for_discount(2046)
-
-INSERT into detail_order values(getdate(),null,1,12000,'F','F')
-insert into orders VALUES(2058,5,7)
-
-exec online_order @costumer_id = 1
-
-select*from custs_login
