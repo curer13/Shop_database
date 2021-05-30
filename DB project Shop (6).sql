@@ -980,3 +980,8 @@ END
 
 select *from detail_order
 select*from orders
+
+create table admins(
+	login VARCHAR(20),
+	PASSWORD VARCHAR(30)
+)
