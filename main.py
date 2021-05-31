@@ -359,11 +359,11 @@ def enter_cust(event):
                 self.b_pay.pack()
                 self.b_cancel = Button(self.window, text='Cancel', bg='bisque4', font=('Lucida'), fg='black', width=8)
                 self.b_cancel.bind('<Button-1>', self.cancel)
-                label = Label(self.window, text='Your orders', bg='floral white', font=('Lucida', 15, 'bold'),
-                              fg='bisque4')
+                # label = Label(self.window, text='Your orders', bg='floral white', font=('Lucida', 15, 'bold'),
+                #              fg='bisque4')
                 self.b_cancel.pack()
                 self.b_paybb.pack()
-                label.pack(side='top')
+                # label.pack(side='top')
                 self.l_order.place(x=self.x, y=self.y + 20)
                 self.b_cancel.place(x=self.x + 560, y=self.y + 20)
                 self.b_pay.place(x=self.x + 300, y=self.y + 20)
@@ -666,7 +666,12 @@ def most_ordered_check(event):
     stock = str(item[0])
     stock = stock.replace('(', '')
     stock = stock.replace(', )', '')
-    print2['text'] += stock.split(' ')[-1][:-1]
+    a = stock.split(' ')[-1][:-1]
+    print(a)
+    if a:
+        print2['text'] += a
+    else:
+        print2['text'] += 'none because does not have data'
 
 
 def admin(event):
@@ -765,6 +770,13 @@ def profit(event):
             ''', mes))
         if s_showp:
             tx = s_showp[0][0]
+            print(tx)
+            label_message = Label(w_prof, text='', bg='floral white', font=('Lucida', 10, 'bold'), fg='bisque4')
+            label_message['text'] = str(tx)
+            label_message.pack()
+            label_message.place(x=200, y=50)
+        else:
+            tx = 'Do not have data in this month'
             print(tx)
             label_message = Label(w_prof, text='', bg='floral white', font=('Lucida', 10, 'bold'), fg='bisque4')
             label_message['text'] = str(tx)
@@ -922,7 +934,7 @@ def stock(event):
 def purchase(event):
     purch = Toplevel(root)
     purch.title('Purchase stock')
-    purch.geometry('300x200')
+    purch.geometry('500x500')
     purch.configure(bg='floral white')
     label_stock = Label(purch, text='Stock id', bg='floral white', font=('Lucida', 12), fg='bisque4')
     label_q = Label(purch, text='Quantity', bg='floral white', font=('Lucida', 12), fg='bisque4')
