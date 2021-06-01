@@ -59,7 +59,7 @@ for x in orders:
 
     i=i+1
 
-wb.save('orders.xls')
+wb.save('detail_order_table_2.xls')
 
 costumers = []
 result = mycursor.execute('select costumer_id from costumers')
